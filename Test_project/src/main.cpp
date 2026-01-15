@@ -11,7 +11,7 @@ void setup()
 
 void loop()
 {
-    Serial.print("Wow");
+    Serial.print("Damn");
     delay(1000);
     // nothing here
 }
