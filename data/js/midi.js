@@ -1,45 +1,5 @@
-const gateway = `ws://localhost:8080`;
-//const gateway = `ws://${window.location.hostname}/ws`;
-let websocket;
+// MIDI player
 
-window.addEventListener("load", onLoad);
-
-// Web socket 
-function onLoad() {
-  initWebSocket();
-}
-
-function initWebSocket() {
-  websocket = new WebSocket(gateway);
-
-  websocket.onopen = () => {
-    console.log("WebSocket connected");
-  };
-
-  websocket.onclose = () => {
-    console.log("WebSocket disconnected, retrying...");
-    //setTimeout(initWebSocket, 2000); // Retry connection
-  };
-
-  websocket.onmessage = (event) => {
-    try {
-      const message = JSON.parse(event.data);
-      if (message.id === "battery") {
-        console.log(message);
-      }
-    } catch (error) {
-      console.log("Received non-JSON message:", event.data);
-    }
-  };
-}
-
-// Piano graphical interface
-let audio = true;
-const viewer = document.getElementById("viewer");
-const piano = document.getElementById("piano");
-const playPauseBtn = document.getElementById("playPause");
-const fileInput = document.getElementById("fileInput");
-const restartBtn = document.getElementById("restart");
 
 const NOTE_HEIGHT = 0;
 const PIANO_WIDTH = piano.clientWidth*8/10;
@@ -64,7 +24,29 @@ let paused = true;
 let pauseTime = 0;
 let white_key_counter = 0;
 let keys = null;
-/* Build piano */
+let time_delta = -1; // Seconds before the song starts
+
+// Prepare all notes from midi file.
+function prepareNotes() {
+  viewer.innerHTML = "";
+  notes = [];
+
+  midiData.tracks.forEach(track => {
+    track.notes.forEach(note => {
+      const el = document.createElement("div");
+      el.className = "note";
+      
+      el.style.width = note_width(note.midi);
+      el.style.left = noteX(note.midi);
+      el.style.height = `${note.duration * FALL_SPEED}px`;
+      el.style.willChange = "transform";
+      el.style.visibility="hidden";
+      viewer.appendChild(el);
+      notes.push({ note, el });
+    });
+  });
+}
+
 
 /*
 * Returns if a given midi note is black or white
@@ -90,33 +72,36 @@ function isBlack(midi_note){
   }
 }
 
-// Generate piano display (create notes)
-for (let n = START_NOTE; n <= END_NOTE; n++) {
-  // Compute key position
-  const note_id = n - START_NOTE;
-  const position_x = note_id*WHITE_NOTE_WIDTH;
-  const key = document.createElement("div");
-  // Start of the piano
-  if (isBlack(n)){
-    key.className = "key black";
-  }else{
-    key.className = "key white";
-  }
-  // Set position and dimensions
-  if (key.className == "key white"){
-    key.style.left = `${white_key_counter*WHITE_NOTE_WIDTH+PIANO_START_X}px`;
-    key.style.width = `${WHITE_NOTE_WIDTH}px`;
-    key.style.height = `${WHITE_NOTE_HEIGHT}px`;
-    white_key_counter++;
-  }else{
-    const x_pos = (white_key_counter)*WHITE_NOTE_WIDTH-BLACK_NOTE_WIDTH/2+PIANO_START_X;
+function generate_piano(){
+    // Generate piano display (create notes)
+    for (let n = START_NOTE; n <= END_NOTE; n++) {
+    // Compute key position
+    const note_id = n - START_NOTE;
+    const position_x = note_id*WHITE_NOTE_WIDTH;
+    const key = document.createElement("div");
+    // Start of the piano
+    if (isBlack(n)){
+        key.className = "key black";
+    }else{
+        key.className = "key white";
+    }
+    // Set position and dimensions
+    if (key.className == "key white"){
+        key.style.left = `${white_key_counter*WHITE_NOTE_WIDTH+PIANO_START_X}px`;
+        key.style.width = `${WHITE_NOTE_WIDTH}px`;
+        key.style.height = `${WHITE_NOTE_HEIGHT}px`;
+        white_key_counter++;
+    }else{
+        const x_pos = (white_key_counter)*WHITE_NOTE_WIDTH-BLACK_NOTE_WIDTH/2+PIANO_START_X;
 
-    key.style.left = `${x_pos}px`;
-    key.style.width = `${BLACK_NOTE_WIDTH}px`;
-    key.style.height = `${BLACK_NOTE_HEIGHT}px`;
-  }
-  piano.appendChild(key);
+        key.style.left = `${x_pos}px`;
+        key.style.width = `${BLACK_NOTE_WIDTH}px`;
+        key.style.height = `${BLACK_NOTE_HEIGHT}px`;
+    }
+    piano.appendChild(key);
+    }
 }
+
 // Save piano keys
 keys = piano.getElementsByClassName("key");
 
@@ -141,78 +126,15 @@ function note_width(midi){
   return ""+WHITE_NOTE_WIDTH+"px";
 }
 
-// HTML FORMS
-restartBtn.onclick = () => {
-  // Always reset time
-  pauseTime = 0;
-  startTime = performance.now();
-
-  // Reset visuals
-  display_notes(0);
-  document.getElementById("timeDisplay").textContent = formatTime(0);
-
-  if (!paused) {
-    // Was playing → keep playing
-    requestAnimationFrame(animate);
-  } else {
-    // Was paused → stay paused
-    playPauseBtn.textContent = "Play";
-  }
-};
-
-fileInput.addEventListener("change", async e => {
-  const file = e.target.files[0];
-  const arrayBuffer = await file.arrayBuffer();
-  midiData = new Midi(arrayBuffer);
-  prepareNotes();
-  // Show notes
-  display_notes(0);
-});
-
-
-playPauseBtn.onclick = () => {
-  paused = !paused;
-  playPauseBtn.textContent = paused ? "Play" : "Pause";
-
-  if (!paused) {
-    // resume or start
-    startTime = performance.now() - pauseTime;
-    requestAnimationFrame(animate);
-  } else {
-    // pause
-    pauseTime = performance.now() - startTime;
-  }
-};
-
-// Prepare all notes from midi file.
-function prepareNotes() {
-  viewer.innerHTML = "";
-  notes = [];
-
-  midiData.tracks.forEach(track => {
-    track.notes.forEach(note => {
-      const el = document.createElement("div");
-      el.className = "note";
-      
-      el.style.width = note_width(note.midi);
-      el.style.left = noteX(note.midi);
-      el.style.height = `${note.duration * FALL_SPEED}px`;
-      el.style.willChange = "transform";
-      el.style.visibility="hidden";
-      viewer.appendChild(el);
-      notes.push({ note, el });
-    });
-  });
-}
+// Track which MIDI notes are currently sounding
+const activeNotes = new Set();
+let viewerHeight = 0;
 
 // Audio player
 const synth = new Tone.PolySynth(Tone.Synth, {
   maxPolyphony: 30,
 
 }).toDestination();
-
-// Track which MIDI notes are currently sounding
-const activeNotes = new Set();
 
 // Make sure audio is unlocked once
 let audioStarted = false;
@@ -224,15 +146,12 @@ async function ensureAudioStarted() {
   }
 }
 
-// MIDI player
-let viewerHeight = 0;
 function updateViewerSize() {
   viewerHeight = viewer.clientHeight;
 }
 
 window.addEventListener("resize", updateViewerSize);
 updateViewerSize();
-
 
 function display_notes(elapsed){
   // Display notes on the screen
@@ -291,7 +210,7 @@ function animate(time) {
     return;
   }
   // Compute elapsed time [s]
-  const elapsed = (time - startTime) * 0.001;
+  const elapsed = (time - startTime) * 0.001+time_delta;
 
   // Update elapsed time on screen
   document.getElementById("timeDisplay").textContent= formatTime(elapsed);
@@ -323,9 +242,10 @@ function animate(time) {
   for (let id of notes_currently_played) {
     if (!activeNotes.has(id)) {
       const midi = notes[id].note.midi;
-      const noteName = Tone.Frequency(midi, "midi").toNote();
+      const vel = notes[id].note.velocity;
+      const noteName = Tone.Frequency(midi,"midi").toNote();
 
-      synth.triggerAttack(noteName);
+      synth.triggerAttack(noteName,undefined,vel);
       activeNotes.add(id);
     }
   }
@@ -339,23 +259,7 @@ function animate(time) {
       activeNotes.delete(id);
     }
   }
-  /*for (let id of activeNotes) {
-    if (!notes_currently_played.has(id)) {
-      const midi = notes[id].note.midi;
-      const noteName = Tone.Frequency(midi, "midi").toNote();        
-      synth.triggerRelease(noteName);
-      activeNotes.delete(id);
-    }
-  }*/q
-  for (let id of activeNotes) {
-    if (!notes_currently_played.has(id)) {
-      const midi = notes[id].note.midi;
-      const noteName = Tone.Frequency(midi, "midi").toNote();        
-      synth.triggerRelease(noteName);
-      activeNotes.delete(id);
-    }
-  }
-  console.log(activeNotes);
+ 
   requestAnimationFrame(animate);
 }
 
