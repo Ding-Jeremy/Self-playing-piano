@@ -53,8 +53,6 @@ fileInput.addEventListener("change", async e => {
       tempo: midiData.header.tempos[0].bpm || 120, // first tempo in BPM
       trackCount: midiData.tracks.length
   };
-
-
   // Send track infos 
   websocket.send(JSON.stringify({ type: "trackInfo", data: trackInfo }));
   // Show notes

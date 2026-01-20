@@ -31,6 +31,7 @@ function prepareNotes() {
   viewer.innerHTML = "";
   notes = [];
 
+  // Read tracks and add notes
   midiData.tracks.forEach(track => {
     track.notes.forEach(note => {
       const el = document.createElement("div");
@@ -45,6 +46,8 @@ function prepareNotes() {
       notes.push({ note, el });
     });
   });
+  // Sort notes in time
+  notes.sort((a, b) => a.note.time - b.note.time);
 }
 
 
