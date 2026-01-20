@@ -55,7 +55,7 @@ fileInput.addEventListener("change", async e => {
   };
 
 
-  // Send it first
+  // Send track infos 
   websocket.send(JSON.stringify({ type: "trackInfo", data: trackInfo }));
   // Show notes
   display_notes(time_delta);
@@ -156,7 +156,7 @@ function send_notes(elapsed){
       velocity: round(n.note.velocity*100)
     }));
 
-    websocket.send(JSON.stringify({ type: "noteChunk", data: chunk }));
+    websocket.send(JSON.stringify({ type: "note_buffer", data: chunk }));
   }else{
     // Check if time before last sent approches the buffer duration, if so, send the next one.
 

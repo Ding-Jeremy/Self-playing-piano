@@ -1,12 +1,12 @@
 /*
- * File:          esp32_c.ino
+ * File:          main.cpp
  * Author:        Ding Jérémy
- * Date:          2025-04-07
+ * Date:          01.2026
  *
- * Description:   Main control program for the Arachnova bot.
- *                This file handles SPI communication as a master to the arduino (slave) and
- *                sets up an ESP32-based WiFi access point. A built-in web interface
- *                allows users to remotely control the bot.
+ * Description:   Main control program for the MIDI interpreter of the self-playing piano.
+ *                The role of this ESP is to hold the web server that controls the UI, handles
+ *                midi inputs as form of notes.
+ *                Send commands to the arduino responsible for controlling the actual solenoids.
  *
  * Modifications:
  * Date:
@@ -208,13 +208,13 @@ void handle_websocket_message(void *arg, uint8_t *data, size_t len)
         {
             String type = (const char *)obj["type"];
 
-            if (type == "trackInfo")
+            if (type == "track_info")
             {
                 S_TRACK_INFO info;
                 info.ticksPerBeat = (uint16_t)obj["data"]["ticksPerBeat"];
                 info.tempo = (uint16_t)obj["data"]["tempo"];
             }
-            else if (type == "noteChunk")
+            else if (type == "note_buffer")
             {
                 JSONVar notesArray = obj["data"];
                 for (int i = 0; i < notesArray.length(); i++)
