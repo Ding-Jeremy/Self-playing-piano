@@ -151,7 +151,7 @@ function send_notes(elapsed){
       note: n.note.midi,
       duration: n.note.durationTicks,
       time: n.note.ticks,
-      velocity: round(n.note.velocity*100)
+      velocity: Math.round(n.note.velocity*100)
     }));
 
     websocket.send(JSON.stringify({ type: "note_buffer", data: chunk }));

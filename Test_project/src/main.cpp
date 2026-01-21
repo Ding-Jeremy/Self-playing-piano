@@ -36,7 +36,7 @@
 #define D_SPI_BUFFSIZE 5
 
 // WiFi credentials
-#define D_SSID "Self-playing-piano"
+#define D_SSID "Self_playing_piano"
 #define D_PASSWORD "1234"
 
 // Notes buffer
@@ -46,13 +46,6 @@
 typedef enum
 {
     E_SPI_COMM_NOOPERA = 0x00, // No operation
-    E_SPI_COMM_CTRLMOT = 0x01, // Control motors
-    E_SPI_COMM_REQSBAT = 0x02, // Request battery status
-    E_SPI_COMM_CTRLSRV = 0x03, // Control servos
-    E_SPI_COMM_CALIBRT = 0x04, // Calibrate steppers
-    E_SPI_COMM_DEMO = 0x05,    // Activate demo mode
-    E_SPI_COMM_CONNECT = 0x06, // Indicates user presence
-    E_SPI_COMM_COLOR = 0x07    // Update the robot's eyes color
 } E_SPI_COMM;
 
 //-------------- ENUMS ---------------
@@ -203,6 +196,7 @@ void handle_websocket_message(void *arg, uint8_t *data, size_t len)
         // Parse Data and Message.
         String message = (char *)data;
         JSONVar obj = JSON.parse(message);
+        Serial.print(message);
         // Read ws message
         if (obj.hasOwnProperty("type"))
         {
