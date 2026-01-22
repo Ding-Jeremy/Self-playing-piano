@@ -14,6 +14,8 @@
 
 #define D_SPI_BUFFSIZE 9
 
+#define D_NOTES_BUFFER_SIZE 20 // Notes to be stored
+
 //-------------- ENUMS ---------------
 typedef enum
 {
@@ -60,14 +62,19 @@ Adafruit_PWMServoDriver g_pwm1 = Adafruit_PWMServoDriver(0x40);
 // Adafruit_PWMServoDriver pwm2 = Adafruit_PWMServoDriver(0x41);
 
 //-------------- VARIABLES ---------------
-U_FRAME g_spi_buf_rx;             // SPI receive buffer
-volatile byte g_spi_buf_index;    // Index of SPI buffer
-volatile boolean g_spi_msg_ready; // Message ready flag
+U_FRAME g_spi_buf_rx;                       // SPI receive buffer
+volatile byte g_spi_buf_index;              // Index of SPI buffer
+volatile boolean g_spi_msg_ready;           // Message ready flag
+S_NOTE g_notes_buffer[D_NOTES_BUFFER_SIZE]; // Note buffer
+uint8_t g_notes_buffer_index = 0;           // Note index (last note to play)
 
 void setup()
 {
   Serial.begin(D_SERIAL_BAUD);
   init_spi();
+  pinMode(D_OE_PIN, OUTPUT);
+  digitalWrite(D_OE_PIN, 0);
+
   g_pwm1.begin();
   // Set SCL speed
   Wire.setClock(D_I2C_SPEED);
@@ -87,6 +94,7 @@ void setup()
 void loop()
 {
   // Reset buffer index and message flag
+  // Treat incoming spi message
   if (g_spi_msg_ready)
   {
     g_spi_buf_index = 0;
@@ -101,11 +109,28 @@ void loop()
     case E_SPI_COMM_NOTE:
     {
       Serial.println(g_spi_buf_rx.bits.note.midi);
+      g_notes_buffer[g_notes_buffer_index] = g_spi_buf_rx.bits.note;
+      g_notes_buffer_index++;
+
+      if (g_notes_buffer_index == D_NOTES_BUFFER_SIZE)
+      {
+        Serial.println("Note buffer overflow");
+        g_notes_buffer_index = 0;
+      }
       break;
     }
     }
-    delay(100); // wait a second to see output
   }
+  // Run solenoids
+  for (uint8_t i = 0; i < g_notes_buffer_index; i++)
+  {
+    S_NOTE note = g_notes_buffer[i];
+    if (note.midi > 0 && note.midi < 16)
+    {
+      g_pwm1.setPWM(note.midi, 0, 4095);
+    }
+  }
+  delay(10); // wait a second to see output
 }
 
 //-------------- INTERRUPTS ---------------
@@ -126,6 +151,8 @@ ISR(SPI_STC_vect)
     g_spi_msg_ready = true;
   }
 }
+
+//-------------- INTERRUPTS ---------------
 
 /*
  * Scans for available addresses on the bus.

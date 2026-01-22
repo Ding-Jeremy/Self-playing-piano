@@ -97,6 +97,7 @@ AsyncWebSocket ws("/ws");  // WebSocket endpoint
 
 // Note queue
 std::queue<S_NOTE> note_queue;
+uint8_t g_test = 0;
 
 //-------------- SETUP FUNCTION ---------------
 void setup()
@@ -120,12 +121,16 @@ void setup()
 //-------------- MAIN LOOP ---------------
 void loop()
 {
+
     U_FRAME test_frame;
     test_frame.bits.command = E_SPI_COMM_NOTE;
     test_frame.bits.note.duration = 100;
-    test_frame.bits.note.midi = 33;
+    test_frame.bits.note.midi = g_test;
     test_frame.bits.note.time = 1;
     test_frame.bits.note.vel = 127;
+    g_test++;
+    if (g_test == 16)
+        g_test = 0;
 
     send_frame(test_frame);
     delay(1000);
