@@ -48,7 +48,7 @@ typedef enum
     E_SPI_COMM_NOOPERA = 0x00, // No operation
 } E_SPI_COMM;
 
-//-------------- ENUMS ---------------
+//-------------- STRUCTS / UNION ---------------
 
 // Define a frame structure
 typedef struct __attribute__((packed))
@@ -66,10 +66,10 @@ typedef union
 
 typedef struct
 {
-    uint8_t note;      // 0 - 88, physical notes of the piano
-    uint16_t duration; // Ticks
-    uint16_t time;     // Ticks
-    uint8_t vel;       // Velocity
+    uint8_t midi;      // 0 - 88, physical notes of the piano
+    uint16_t duration; // [ms]
+    uint32_t time;     // [ms]
+    uint8_t vel;       // Velocity [0-255]
 } S_NOTE;
 
 typedef struct
@@ -214,7 +214,7 @@ void handle_websocket_message(void *arg, uint8_t *data, size_t len)
                 for (int i = 0; i < notesArray.length(); i++)
                 {
                     S_NOTE n;
-                    n.note = (uint8_t)notesArray[i]["note"];
+                    n.midi = (uint8_t)notesArray[i]["note"];
                     n.duration = (uint16_t)notesArray[i]["duration"];
                     n.time = (uint16_t)notesArray[i]["time"];
                     n.vel = (uint8_t)notesArray[i]["velocity"];

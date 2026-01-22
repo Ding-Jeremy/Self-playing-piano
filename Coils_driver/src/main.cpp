@@ -6,11 +6,35 @@
 #include <Arduino.h>
 #include <Adafruit_PWMServoDriver.h>
 
-// Defines
+//-------------- DEFINES ---------------
 #define D_OE_PIN 4
 #define D_SERIAL_BAUD 9600 // bit/s
 #define D_I2C_SPEED 200000 // bit/s
 #define D_PWM_FREQ 100     // Hz
+
+#define D_SPI_BUFFSIZE 5
+//-------------- ENUMS ---------------
+typedef enum
+{
+  E_SPI_COMM_NOOPERA = 0x00, // No operation
+} E_SPI_COMM;
+//-------------- STRUCTS / UNION ---------------
+// Define a frame structure
+typedef struct __attribute__((packed))
+{
+  E_SPI_COMM command : 8;
+  int16_t data_1 : 16;
+  int16_t data_2 : 16;
+} S_FRAME;
+
+typedef union
+{
+  S_FRAME bits;
+  uint8_t bytes[D_SPI_BUFFSIZE];
+} U_FRAME;
+
+//-------------- PROTOTYPES---------------
+
 // Two boards with different I2C addresses
 Adafruit_PWMServoDriver pwm1 = Adafruit_PWMServoDriver(0x40);
 // Adafruit_PWMServoDriver pwm2 = Adafruit_PWMServoDriver(0x41);
@@ -28,7 +52,7 @@ void setup()
   Serial.begin(D_SERIAL_BAUD);
   pwm1.begin();
   // Set SCL speed
-  Wire.setClock(D_I2C_SPEED); // 400 kHz
+  Wire.setClock(D_I2C_SPEED);
   // set totem pole output
   pwm1.setOutputMode(true);
 
