@@ -29,11 +29,11 @@
 #define D_SPI_CLK 14
 #define D_SPI_MISO 12
 #define D_SPI_MOSI 13
-#define D_SPI_SS 15
+#define D_SPI_SS 32
 #define D_SPI_BAUDRATE 500000
 
 // SPI buffer sizes
-#define D_SPI_BUFFSIZE 5
+#define D_SPI_BUFFSIZE 9
 
 // WiFi credentials
 #define D_SSID "Self_playing_piano"
@@ -46,23 +46,11 @@
 typedef enum
 {
     E_SPI_COMM_NOOPERA = 0x00, // No operation
+    E_SPI_COMM_NOTE = 0x01,    // Note info
+    E_SPI_ALL_OFF = 0x02       // Turn all solenoid off
 } E_SPI_COMM;
 
 //-------------- STRUCTS / UNION ---------------
-
-// Define a frame structure
-typedef struct __attribute__((packed))
-{
-    E_SPI_COMM command : 8;
-    int16_t data_1 : 16;
-    int16_t data_2 : 16;
-} S_FRAME;
-
-typedef union
-{
-    S_FRAME bits;
-    uint8_t bytes[D_SPI_BUFFSIZE];
-} U_FRAME;
 
 typedef struct
 {
@@ -77,6 +65,19 @@ typedef struct
     uint16_t ticksPerBeat; // e.g., 480
     uint16_t tempo;        // BPM
 } S_TRACK_INFO;
+
+// Define a frame structure
+typedef struct __attribute__((packed))
+{
+    E_SPI_COMM command : 8;
+    S_NOTE note;
+} S_FRAME;
+
+typedef union
+{
+    S_FRAME bits;
+    uint8_t bytes[D_SPI_BUFFSIZE];
+} U_FRAME;
 
 //-------------- FUNCTION PROTOTYPES ---------------
 void init_littlefs();
@@ -119,6 +120,15 @@ void setup()
 //-------------- MAIN LOOP ---------------
 void loop()
 {
+    U_FRAME test_frame;
+    test_frame.bits.command = E_SPI_COMM_NOTE;
+    test_frame.bits.note.duration = 100;
+    test_frame.bits.note.midi = 33;
+    test_frame.bits.note.time = 1;
+    test_frame.bits.note.vel = 127;
+
+    send_frame(test_frame);
+    delay(1000);
 }
 
 //-------------- FUNCTION IMPLEMENTATIONS ---------------
