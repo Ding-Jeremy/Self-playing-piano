@@ -1,6 +1,7 @@
 // MIDI player
 
 
+// Graphics constants
 const NOTE_HEIGHT = 0;
 const PIANO_WIDTH = piano.clientWidth*8/10;
 
@@ -12,11 +13,15 @@ const BLACK_NOTE_HEIGHT = BLACK_NOTE_WIDTH*7;
 
 const PIANO_START_X = (piano.clientWidth-PIANO_WIDTH)/2;
 const PIANO_START_Y = viewer.clientHeight;
-const FALL_SPEED = 100  ;
+const FALL_SPEED = 0.1  ;
 const START_NOTE = 21; // C3
 const END_NOTE = 108;   // C6
 const NOTE_START_HEIGHT = 100;
+// Piano constants (physical)
+const PHY_MIN_OFF_ON_DELAY = 100; // ms
+const PHY_MAX_CONCURENT_NOTES = 10;
 
+// Variables
 let midiData = null;
 let notes = [];
 let startTime = null;
@@ -24,7 +29,8 @@ let paused = true;
 let pauseTime = 0;
 let white_key_counter = 0;
 let keys = null;
-let time_delta = -1; // Seconds before the song starts
+let time_delta = 1; // Seconds before the song starts
+const events = [];  // Create events (those are sent to the ESP, not the notes.)
 
 // Prepare all notes from midi file.
 function prepareNotes() {
@@ -39,7 +45,7 @@ function prepareNotes() {
       
       el.style.width = note_width(note.midi);
       el.style.left = noteX(note.midi);
-      el.style.height = `${note.duration * FALL_SPEED}px`;
+      el.style.height = `${note.duration}px`;
       el.style.willChange = "transform";
       el.style.visibility="hidden";
       viewer.appendChild(el);
@@ -48,6 +54,88 @@ function prepareNotes() {
   });
   // Sort notes in time
   notes.sort((a, b) => a.note.time - b.note.time);
+
+  configure_events();
+}
+
+/*
+* Analyse notes, add ON OFF argument, check for validity. Moves all notes forward from
+* time delta.
+* adapt notes format.
+* adjust for physical limitations.
+*/
+function configure_events(){
+  // Move all notes forward from time delta
+  // Adjust time value (ms)
+  for (let note of notes){
+    note.note.time += time_delta;
+    note.note.time = Math.round(note.note.time*1000); // ms
+    note.note.duration = Math.round(note.note.duration*1000); // ms
+  }
+
+    // Create events
+  for (let note of notes) {
+    // NOTE ON
+    events.push({
+      midi: note.note.midi,
+      time: note.note.time,
+      on: 1,
+      noteRef: note  
+    });
+
+    // NOTE OFF
+    events.push({
+      midi: note.note.midi,
+      time: note.note.time + note.note.duration,
+      on: 0,
+      noteRef: note  
+    });
+  }
+
+  // Now check for notes restarts (add mandatory waiting time. (reduce note duration, and add a note off))
+  // Loops through each keys
+  const activeNoteByMidi = new Map(); // midi -> note object
+
+  events.sort((a, b) => {
+  if (a.time !== b.time) return a.time - b.time;
+    return a.on - b.on; // off (0) before on (1)
+  });
+
+  for (let e of events) {
+    const midi = e.midi;
+
+    if (e.on === 1) {
+      // NOTE ON
+      if (activeNoteByMidi.has(midi)) {
+        const prev = activeNoteByMidi.get(midi);
+
+        // shorten previous note, do NOT move timing
+        const forcedOff = e.time - PHY_MIN_OFF_ON_DELAY;
+        prev.note.duration = Math.max(
+          0,
+          forcedOff - prev.note.time
+        );
+      }
+
+      activeNoteByMidi.set(midi, e.noteRef);
+
+    } else {
+      // NOTE OFF
+      if (activeNoteByMidi.get(midi) === e.noteRef) {
+        e.noteRef.note.duration = Math.max(
+          0,
+          e.time - e.noteRef.note.time
+        );
+        activeNoteByMidi.delete(midi);
+      }
+    }
+  }
+
+  // Update notes height
+  for (let note of notes) {
+    note.el.style.height =
+      `${note.note.duration * FALL_SPEED}px`;
+  }
 }
 
 
@@ -168,7 +256,7 @@ function display_notes(elapsed){
       NOTE_HEIGHT;
     const current_height = obj.note.duration*FALL_SPEED;
     // Cut off-screen notes
-    if (y_bot < 0 || y_bot-current_height > viewerHeight){
+    if (y_bot < 0 || y_bot-current_height > viewerHeight || obj.note.on == "0"){
       obj.el.style.visibility="hidden";
       continue;
     }

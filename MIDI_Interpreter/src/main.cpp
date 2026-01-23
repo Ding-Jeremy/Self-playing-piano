@@ -33,7 +33,7 @@
 #define D_SPI_BAUDRATE 500000
 
 // SPI buffer sizes
-#define D_SPI_BUFFSIZE 10
+#define D_SPI_BUFFSIZE 8
 
 // WiFi credentials
 #define D_SSID "Self_playing_piano"
@@ -57,11 +57,10 @@ typedef enum
 
 typedef struct
 {
-    uint8_t midi;      // 0 - 88, physical notes of the piano
-    uint8_t on;        // 1 = On, 0 = off
-    uint16_t duration; // [ms]
-    uint32_t time;     // [ms]
-    uint8_t vel;       // Velocity [0-255]
+    uint8_t midi;  // 0 - 88, physical notes of the piano
+    uint8_t on;    // 1 = On, 0 = off
+    uint32_t time; // [ms]
+    uint8_t vel;   // Velocity [0-255]
 } S_NOTE;
 
 typedef struct
@@ -214,12 +213,11 @@ void handle_websocket_message(void *arg, uint8_t *data, size_t len)
                 info.ticksPerBeat = (uint16_t)obj["data"]["ticksPerBeat"];
                 info.tempo = (uint16_t)obj["data"]["tempo"];
             }
-            else if (type == "note")
+            else if (type == "event")
             {
                 // Read note info
                 S_NOTE n;
                 n.midi = (uint8_t)obj["data"]["midi"];
-                n.duration = (uint32_t)obj["data"]["duration"];
                 n.time = (uint32_t)obj["data"]["time"];
                 n.vel = (uint8_t)obj["data"]["velocity"];
                 n.on = (uint8_t)obj["data"]["on"];

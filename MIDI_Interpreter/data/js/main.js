@@ -23,7 +23,7 @@ const fileInput = document.getElementById("fileInput");
 const restartBtn = document.getElementById("restart");
 const LOOKAHEAD_MS = 0.5;
 
-let nextNoteIndex = 0;   // cursor into notes[]
+let nextEventIndex = 0;  // cursor into notes[]
 
 // HTML FORMS
 restartBtn.onclick = () => {
@@ -59,7 +59,7 @@ fileInput.addEventListener("change", async e => {
   // Send track infos 
   websocket.send(JSON.stringify({ type: "track_info", data: trackInfo }));
   // Show notes
-  display_notes(time_delta);
+  display_notes(0);
 });
 
 playPauseBtn.onclick = () => {
@@ -68,12 +68,12 @@ playPauseBtn.onclick = () => {
 
   if (!paused) {
     
-    // Compute time
+    // Compute time (minus pause time)
     startTime = performance.now() - pauseTime;
     const time_info = {
       time: startTime
     };
-    // resume
+    // Send current midi time to server. (Synchronize with arduino)
     websocket.send(JSON.stringify({type: "resume",data:time_info}));
     requestAnimationFrame(animate);
   } else {
@@ -94,10 +94,10 @@ function animate(time) {
     return;
   }
   // Compute elapsed time [s]
-  const elapsed = (time - startTime) * 0.001+time_delta;
+  const elapsed = (time - startTime);
 
   // Update elapsed time on screen
-  document.getElementById("timeDisplay").textContent= formatTime(elapsed);
+  document.getElementById("timeDisplay").textContent= formatTime(elapsed/1000);
   // Html objects
   keys_currently_played = [];
 
@@ -121,33 +121,32 @@ function animate(time) {
 
   // Highlight currently played keys
   highlight_notes(keys_currently_played);
-  send_notes(elapsed);
+  send_events(elapsed);
   requestAnimationFrame(animate);
 }
 
-function send_notes(elapsed) {
+function send_events(elapsed) {
   const windowEnd = elapsed + LOOKAHEAD_MS;
 
   while (
-    nextNoteIndex < notes.length &&
-    notes[nextNoteIndex].note.time <= windowEnd
+    nextEventIndex < events.length &&
+    events[nextEventIndex].time <= windowEnd
   ) {
-    const note = notes[nextNoteIndex].note;
-
-    send_note_to_esp(note);
-
-    nextNoteIndex++;
+    send_event_to_esp(events[nextEventIndex]);
+    nextEventIndex++;
   }
 }
 
-function send_note_to_esp(note) {
+function send_event_to_esp(event) {
   const msg = {
-    time: Math.round(note.time*1000),        // absolute ms from song start
-    midi: note.midi-START_NOTE,
-    duration: Math.round(note.duration*1000), //ms
-    velocity: Math.round(note.velocity*255),
-    on: 1,
+    time: Math.round(event.time), // already ms
+    midi: event.midi - START_NOTE,
+    velocity: event.on ? Math.round(event.velocity * 255) : 0,
+    on: event.on
   };
 
-  websocket.send(JSON.stringify({ type: "note", data: msg }));
+  websocket.send(JSON.stringify({
+    type: "event",
+    data: msg
+  }));
 }

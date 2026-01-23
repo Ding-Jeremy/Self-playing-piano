@@ -12,7 +12,7 @@
 #define D_I2C_SPEED 200000 // bit/s
 #define D_PWM_FREQ 100     // Hz
 
-#define D_SPI_BUFFSIZE 10
+#define D_SPI_BUFFSIZE 8
 
 #define D_NOTES_BUFFER_SIZE 20 // Notes to be stored
 
@@ -33,11 +33,10 @@ typedef enum
 
 typedef struct
 {
-  uint8_t midi;      // 0 - 88, physical notes of the piano
-  uint8_t on;        // 1 = On, 0 = off
-  uint16_t duration; // [ms]
-  uint32_t time;     // [ms]
-  uint8_t vel;       // Velocity [0-255]
+  uint8_t midi;  // 0 - 88, physical notes of the piano
+  uint8_t on;    // 1 = On, 0 = off
+  uint32_t time; // [ms]
+  uint8_t vel;   // Velocity [0-255]
 } S_NOTE;
 
 typedef struct
@@ -144,6 +143,7 @@ void loop()
       g_notes_buffer_index++;
       Serial.println(g_notes_buffer[g_notes_buffer_index].midi);
       Serial.println(g_notes_buffer[g_notes_buffer_index].on);
+
       if (g_notes_buffer_index >= D_NOTES_BUFFER_SIZE)
       {
         Serial.println("Note buffer overflow");
