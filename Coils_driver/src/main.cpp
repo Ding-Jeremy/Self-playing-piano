@@ -75,12 +75,10 @@ volatile boolean g_spi_msg_ready;           // Message ready flag
 S_NOTE g_notes_buffer[D_NOTES_BUFFER_SIZE]; // Note buffer
 uint8_t g_notes_buffer_index = 0;           // Note index (last note to play)
 
-uint32_t g_current_time = 0;     // Time to play midi
-uint32_t g_start_time = 0;       // Start time (in order to compute delta)
-uint32_t g_pause_time_accum = 0; // total milliseconds spent paused
-uint32_t g_pause_start = 0;      // millis() when pause started
-
-bool g_playing = false; // Playing flag
+uint32_t g_current_time = 0; // Time to play midi
+uint32_t g_resume_time = 0;  // Time of resuming
+uint32_t g_midi_time = 0;    // Midi time (ms)
+bool g_playing = false;      // Playing flag
 
 void setup()
 {
@@ -122,31 +120,22 @@ void loop()
     case E_SPI_COMM_ALL_OFF:
       all_off();
       break;
-
-    case E_SPI_COMM_START:
-      Serial.println("start");
-      g_playing = true;
-      g_start_time = millis();
-      g_pause_time_accum = 0;
-      g_pause_start = 0;
-      g_notes_buffer_index = 0;
-      break;
-
     case E_SPI_COMM_PAUSE:
       if (g_playing)
       {
         Serial.println("paused");
         g_playing = false;
-        g_pause_start = millis();
       }
       break;
 
     case E_SPI_COMM_RESUME:
+      // Resume command, comes with the current midi time (sent by server)
       if (!g_playing)
       {
         g_playing = true;
         Serial.println("playing");
-        g_pause_time_accum += millis() - g_pause_start;
+        g_resume_time = millis();                  // Save current time of resumal
+        g_midi_time = g_spi_buf_rx.bits.note.time; // Get midi time at resumal
       }
       break;
 
@@ -170,7 +159,7 @@ void loop()
   if (g_playing)
   {
     // Get current time
-    g_current_time = millis() - g_start_time - g_pause_time_accum;
+    g_current_time = millis() - g_resume_time + g_midi_time;
 
     // Check for solenoids to start in the futur buffer
     while (g_notes_buffer_index > 0)

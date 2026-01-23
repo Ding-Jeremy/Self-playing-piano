@@ -67,9 +67,14 @@ playPauseBtn.onclick = () => {
   playPauseBtn.textContent = paused ? "Play" : "Pause";
 
   if (!paused) {
-    // resume
-    websocket.send(JSON.stringify({type: "resume"}));
+    
+    // Compute time
     startTime = performance.now() - pauseTime;
+    const time_info = {
+      time: startTime
+    };
+    // resume
+    websocket.send(JSON.stringify({type: "resume",data:time_info}));
     requestAnimationFrame(animate);
   } else {
     // pause

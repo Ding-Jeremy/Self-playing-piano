@@ -218,11 +218,11 @@ void handle_websocket_message(void *arg, uint8_t *data, size_t len)
             {
                 // Read note info
                 S_NOTE n;
-                n.midi = (uint8_t)obj["midi"];
-                n.duration = (uint32_t)obj["duration"];
-                n.time = (uint32_t)obj["time"];
-                n.vel = (uint8_t)obj["velocity"];
-                n.on = (uint8_t)obj["on"];
+                n.midi = (uint8_t)obj["data"]["midi"];
+                n.duration = (uint32_t)obj["data"]["duration"];
+                n.time = (uint32_t)obj["data"]["time"];
+                n.vel = (uint8_t)obj["data"]["velocity"];
+                n.on = (uint8_t)obj["data"]["on"];
                 // Send note info to arduino
                 U_FRAME note_frame;
                 note_frame.bits.command = E_SPI_COMM_NOTE;
@@ -239,6 +239,7 @@ void handle_websocket_message(void *arg, uint8_t *data, size_t len)
             {
                 U_FRAME resume_frame;
                 resume_frame.bits.command = E_SPI_COMM_RESUME;
+                resume_frame.bits.note.time = (uint32_t)obj["data"]["time"];
                 send_frame(resume_frame);
             }
         }
