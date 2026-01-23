@@ -12,16 +12,21 @@
 #define D_I2C_SPEED 200000 // bit/s
 #define D_PWM_FREQ 100     // Hz
 
-#define D_SPI_BUFFSIZE 9
+#define D_SPI_BUFFSIZE 10
 
 #define D_NOTES_BUFFER_SIZE 20 // Notes to be stored
+
+#define D_PHASE_ACC_DURATION 20 // Solenoid acceleration [ms]
 
 //-------------- ENUMS ---------------
 typedef enum
 {
   E_SPI_COMM_NOOPERA = 0x00, // No operation
   E_SPI_COMM_NOTE = 0x01,    // Note info
-  E_SPI_ALL_OFF = 0x02       // Turn all solenoid off
+  E_SPI_COMM_ALL_OFF = 0x02, // Turn all solenoid off
+  E_SPI_COMM_START = 0x03,   // Start playing the notes, (reset timer)
+  E_SPI_COMM_PAUSE = 0x04,   // Pause the music
+  E_SPI_COMM_RESUME = 0x05   // Resume the music
 } E_SPI_COMM;
 
 //-------------- STRUCTS / UNION ---------------
@@ -29,6 +34,7 @@ typedef enum
 typedef struct
 {
   uint8_t midi;      // 0 - 88, physical notes of the piano
+  uint8_t on;        // 1 = On, 0 = off
   uint16_t duration; // [ms]
   uint32_t time;     // [ms]
   uint8_t vel;       // Velocity [0-255]
@@ -56,7 +62,8 @@ typedef union
 //-------------- PROTOTYPES---------------
 void i2c_scan();
 void init_spi();
-
+void all_off();
+void remove_first_note();
 // Two boards with different I2C addresses
 Adafruit_PWMServoDriver g_pwm1 = Adafruit_PWMServoDriver(0x40);
 // Adafruit_PWMServoDriver pwm2 = Adafruit_PWMServoDriver(0x41);
@@ -67,6 +74,13 @@ volatile byte g_spi_buf_index;              // Index of SPI buffer
 volatile boolean g_spi_msg_ready;           // Message ready flag
 S_NOTE g_notes_buffer[D_NOTES_BUFFER_SIZE]; // Note buffer
 uint8_t g_notes_buffer_index = 0;           // Note index (last note to play)
+
+uint32_t g_current_time = 0;     // Time to play midi
+uint32_t g_start_time = 0;       // Start time (in order to compute delta)
+uint32_t g_pause_time_accum = 0; // total milliseconds spent paused
+uint32_t g_pause_start = 0;      // millis() when pause started
+
+bool g_playing = false; // Playing flag
 
 void setup()
 {
@@ -102,35 +116,86 @@ void loop()
 
     switch (g_spi_buf_rx.bits.command)
     {
-    case E_SPI_ALL_OFF:
-    {
+    case E_SPI_COMM_NOOPERA:
       break;
-    }
+
+    case E_SPI_COMM_ALL_OFF:
+      all_off();
+      break;
+
+    case E_SPI_COMM_START:
+      Serial.println("start");
+      g_playing = true;
+      g_start_time = millis();
+      g_pause_time_accum = 0;
+      g_pause_start = 0;
+      g_notes_buffer_index = 0;
+      break;
+
+    case E_SPI_COMM_PAUSE:
+      if (g_playing)
+      {
+        Serial.println("paused");
+        g_playing = false;
+        g_pause_start = millis();
+      }
+      break;
+
+    case E_SPI_COMM_RESUME:
+      if (!g_playing)
+      {
+        g_playing = true;
+        Serial.println("playing");
+        g_pause_time_accum += millis() - g_pause_start;
+      }
+      break;
+
     case E_SPI_COMM_NOTE:
-    {
-      Serial.println(g_spi_buf_rx.bits.note.midi);
       g_notes_buffer[g_notes_buffer_index] = g_spi_buf_rx.bits.note;
       g_notes_buffer_index++;
-
-      if (g_notes_buffer_index == D_NOTES_BUFFER_SIZE)
+      Serial.println(g_notes_buffer[g_notes_buffer_index].midi);
+      Serial.println(g_notes_buffer[g_notes_buffer_index].on);
+      if (g_notes_buffer_index >= D_NOTES_BUFFER_SIZE)
       {
         Serial.println("Note buffer overflow");
         g_notes_buffer_index = 0;
       }
       break;
-    }
+
+    default:
+      break;
     }
   }
-  // Run solenoids
-  for (uint8_t i = 0; i < g_notes_buffer_index; i++)
+  // Run solenoids if playing
+  if (g_playing)
   {
-    S_NOTE note = g_notes_buffer[i];
-    if (note.midi > 0 && note.midi < 16)
+    // Get current time
+    g_current_time = millis() - g_start_time - g_pause_time_accum;
+
+    // Check for solenoids to start in the futur buffer
+    while (g_notes_buffer_index > 0)
     {
-      g_pwm1.setPWM(note.midi, 0, 4095);
+      S_NOTE &note = g_notes_buffer[0];
+
+      if (note.time > g_current_time)
+        break; // earliest note is still in the future
+
+      // --- Execute note ---
+      if (note.midi > 0 && note.midi < 16)
+      {
+        if (note.on)
+        {
+          g_pwm1.setPWM(note.midi, 0, 4095);
+        }
+        else
+        {
+          g_pwm1.setPWM(note.midi, 0, 0);
+        }
+      }
+      // --- Remove note from buffer ---
+      remove_first_note();
     }
   }
-  delay(10); // wait a second to see output
 }
 
 //-------------- INTERRUPTS ---------------
@@ -152,7 +217,7 @@ ISR(SPI_STC_vect)
   }
 }
 
-//-------------- INTERRUPTS ---------------
+//-------------- FUNCTIONS ---------------
 
 /*
  * Scans for available addresses on the bus.
@@ -188,4 +253,25 @@ void init_spi()
 
   SPCR |= _BV(SPE);  // Enable SPI
   SPCR |= _BV(SPIE); // Enable SPI interrupt
+}
+
+/*
+ * Turns all solenoids off
+ */
+void all_off()
+{
+}
+
+/*
+ * Remove the first note of the note buffer (shifting all others)
+ */
+void remove_first_note()
+{
+  // Shift all remaining notes left by one
+  for (uint8_t i = 1; i < g_notes_buffer_index; i++)
+  {
+    g_notes_buffer[i - 1] = g_notes_buffer[i];
+  }
+
+  g_notes_buffer_index--;
 }

@@ -33,7 +33,7 @@
 #define D_SPI_BAUDRATE 500000
 
 // SPI buffer sizes
-#define D_SPI_BUFFSIZE 9
+#define D_SPI_BUFFSIZE 10
 
 // WiFi credentials
 #define D_SSID "Self_playing_piano"
@@ -47,7 +47,10 @@ typedef enum
 {
     E_SPI_COMM_NOOPERA = 0x00, // No operation
     E_SPI_COMM_NOTE = 0x01,    // Note info
-    E_SPI_ALL_OFF = 0x02       // Turn all solenoid off
+    E_SPI_COMM_ALL_OFF = 0x02, // Turn all solenoid off
+    E_SPI_COMM_START = 0x03,   // Start playing the notes, (reset timer)
+    E_SPI_COMM_PAUSE = 0x04,   // Pause the music
+    E_SPI_COMM_RESUME = 0x05   // Resume the music
 } E_SPI_COMM;
 
 //-------------- STRUCTS / UNION ---------------
@@ -55,6 +58,7 @@ typedef enum
 typedef struct
 {
     uint8_t midi;      // 0 - 88, physical notes of the piano
+    uint8_t on;        // 1 = On, 0 = off
     uint16_t duration; // [ms]
     uint32_t time;     // [ms]
     uint8_t vel;       // Velocity [0-255]
@@ -121,19 +125,7 @@ void setup()
 //-------------- MAIN LOOP ---------------
 void loop()
 {
-
-    U_FRAME test_frame;
-    test_frame.bits.command = E_SPI_COMM_NOTE;
-    test_frame.bits.note.duration = 100;
-    test_frame.bits.note.midi = g_test;
-    test_frame.bits.note.time = 1;
-    test_frame.bits.note.vel = 127;
-    g_test++;
-    if (g_test == 16)
-        g_test = 0;
-
-    send_frame(test_frame);
-    delay(1000);
+    // delay(1000);
 }
 
 //-------------- FUNCTION IMPLEMENTATIONS ---------------
@@ -211,7 +203,6 @@ void handle_websocket_message(void *arg, uint8_t *data, size_t len)
         // Parse Data and Message.
         String message = (char *)data;
         JSONVar obj = JSON.parse(message);
-        Serial.print(message);
         // Read ws message
         if (obj.hasOwnProperty("type"))
         {
@@ -223,18 +214,32 @@ void handle_websocket_message(void *arg, uint8_t *data, size_t len)
                 info.ticksPerBeat = (uint16_t)obj["data"]["ticksPerBeat"];
                 info.tempo = (uint16_t)obj["data"]["tempo"];
             }
-            else if (type == "note_buffer")
+            else if (type == "note")
             {
-                JSONVar notesArray = obj["data"];
-                for (int i = 0; i < notesArray.length(); i++)
-                {
-                    S_NOTE n;
-                    n.midi = (uint8_t)notesArray[i]["note"];
-                    n.duration = (uint16_t)notesArray[i]["duration"];
-                    n.time = (uint16_t)notesArray[i]["time"];
-                    n.vel = (uint8_t)notesArray[i]["velocity"];
-                    note_queue.push(n);
-                }
+                // Read note info
+                S_NOTE n;
+                n.midi = (uint8_t)obj["midi"];
+                n.duration = (uint32_t)obj["duration"];
+                n.time = (uint32_t)obj["time"];
+                n.vel = (uint8_t)obj["velocity"];
+                n.on = (uint8_t)obj["on"];
+                // Send note info to arduino
+                U_FRAME note_frame;
+                note_frame.bits.command = E_SPI_COMM_NOTE;
+                note_frame.bits.note = n;
+                send_frame(note_frame);
+            }
+            else if (type == "pause")
+            {
+                U_FRAME pause_frame;
+                pause_frame.bits.command = E_SPI_COMM_PAUSE;
+                send_frame(pause_frame);
+            }
+            else if (type == "resume")
+            {
+                U_FRAME resume_frame;
+                resume_frame.bits.command = E_SPI_COMM_RESUME;
+                send_frame(resume_frame);
             }
         }
     }

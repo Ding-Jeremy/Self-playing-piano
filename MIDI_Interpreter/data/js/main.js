@@ -5,6 +5,8 @@
 const gateway = `ws://${window.location.hostname}/ws`;
 let websocket;
 
+// Sends note to the ESP-32 that are that time away
+
 window.addEventListener("load", onLoad);
 
 // Web socket 
@@ -19,8 +21,9 @@ const piano = document.getElementById("piano");
 const playPauseBtn = document.getElementById("playPause");
 const fileInput = document.getElementById("fileInput");
 const restartBtn = document.getElementById("restart");
-const notes_buffer_size = 50;
-let notes_buffer_duration = null; // Defines the time needed to complete the buffer
+const LOOKAHEAD_MS = 0.5;
+
+let nextNoteIndex = 0;   // cursor into notes[]
 
 // HTML FORMS
 restartBtn.onclick = () => {
@@ -54,7 +57,7 @@ fileInput.addEventListener("change", async e => {
       trackCount: midiData.tracks.length
   };
   // Send track infos 
-  websocket.send(JSON.stringify({ type: "trackInfo", data: trackInfo }));
+  websocket.send(JSON.stringify({ type: "track_info", data: trackInfo }));
   // Show notes
   display_notes(time_delta);
 });
@@ -64,11 +67,13 @@ playPauseBtn.onclick = () => {
   playPauseBtn.textContent = paused ? "Play" : "Pause";
 
   if (!paused) {
-    // resume or start
+    // resume
+    websocket.send(JSON.stringify({type: "resume"}));
     startTime = performance.now() - pauseTime;
     requestAnimationFrame(animate);
   } else {
     // pause
+    websocket.send(JSON.stringify({type: "pause"}));
     pauseTime = performance.now() - startTime;
   }
 };
@@ -111,53 +116,33 @@ function animate(time) {
 
   // Highlight currently played keys
   highlight_notes(keys_currently_played);
-  // ONLY FOR AUDIO
-  // Turn on notes that are in keys_currently_played but not active
-  /*for (let id of notes_currently_played) {
-    if (!activeNotes.has(id)) {
-      const midi = notes[id].note.midi;
-      const vel = notes[id].note.velocity;
-      const noteName = Tone.Frequency(midi,"midi").toNote();
-
-      synth.triggerAttack(noteName,undefined,vel);
-      activeNotes.add(id);
-    }
-  }
-
-  // Turn off notes that are active but no longer in keys_currently_played
-  for (let id of activeNotes) {
-    if (!notes_currently_played.has(id)) {
-      const midi = notes[id].note.midi;
-      const noteName = Tone.Frequency(midi, "midi").toNote();        
-      synth.triggerRelease(noteName);
-      activeNotes.delete(id);
-    }
-  }*/
- 
+  send_notes(elapsed);
   requestAnimationFrame(animate);
 }
 
-function send_notes(elapsed){
-  // sends notes when needed, (relative to time elapsed and note buffer and tick rate)
-  // First call (nothing sent yet)
-  if (notes_buffer_duration == null){
-    // Compute the duration
-    notes_buffer_duration = 0;
-    for (let i = 0; i < notes_buffer_size; i++){
-      notes_buffer_duration += notes[i].note.midi.duration;
-    }
-    // Send first notes
-    const chunk = notes.slice(0, notes_buffer_size).map(n => ({
-      note: n.note.midi,
-      duration: n.note.durationTicks,
-      time: n.note.ticks,
-      velocity: Math.round(n.note.velocity*100)
-    }));
+function send_notes(elapsed) {
+  const windowEnd = elapsed + LOOKAHEAD_MS;
 
-    websocket.send(JSON.stringify({ type: "note_buffer", data: chunk }));
-  }else{
-    // Check if time before last sent approches the buffer duration, if so, send the next one.
+  while (
+    nextNoteIndex < notes.length &&
+    notes[nextNoteIndex].note.time <= windowEnd
+  ) {
+    const note = notes[nextNoteIndex].note;
 
+    send_note_to_esp(note);
+
+    nextNoteIndex++;
   }
 }
-    
+
+function send_note_to_esp(note) {
+  const msg = {
+    time: Math.round(note.time*1000),        // absolute ms from song start
+    midi: note.midi-START_NOTE,
+    duration: Math.round(note.duration*1000), //ms
+    velocity: Math.round(note.velocity*255),
+    on: 1,
+  };
+
+  websocket.send(JSON.stringify({ type: "note", data: msg }));
+}
