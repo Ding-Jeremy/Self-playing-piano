@@ -36,7 +36,7 @@
 #define D_SPI_BUFFSIZE 8
 
 // WiFi credentials
-#define D_SSID "Self_playing_piano"
+#define D_SSID "SPP"
 #define D_PASSWORD "1234"
 
 // Notes buffer
@@ -225,6 +225,15 @@ void handle_websocket_message(void *arg, uint8_t *data, size_t len)
                 U_FRAME note_frame;
                 note_frame.bits.command = E_SPI_COMM_NOTE;
                 note_frame.bits.note = n;
+                Serial.println("Sending note:");
+                Serial.print(note_frame.bits.note.midi);
+                Serial.print(" - ");
+                Serial.print(note_frame.bits.note.time);
+                Serial.print(" - ");
+                Serial.print(note_frame.bits.note.on);
+                Serial.print(" - ");
+                Serial.print(note_frame.bits.note.vel);
+                Serial.println("");
                 send_frame(note_frame);
             }
             else if (type == "pause")

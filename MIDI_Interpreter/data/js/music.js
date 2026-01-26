@@ -33,7 +33,7 @@ let keys = null;
 let time_delta = 1000; // MS delay before song start
 
 const events = [];  // Create events (those are sent to the ESP, not the notes.)
-
+const adjustedEvents = []; // Adjusted events are corrected to fit the piano limitaions
 // Prepare all notes from midi file.
 function prepareNotes() {
   viewer.innerHTML = "";
@@ -51,11 +51,11 @@ function prepareNotes() {
       el.style.willChange = "transform";
       el.style.visibility="hidden";
       viewer.appendChild(el);
-      
+
       // Create a note based on the elements given by the midi file
       note = {
-        time: Math.round(note.time*1000), // Change to ms
-        duration: Math.round(note.duration*1000+time_delta), // ms
+        time: Math.round(note.time*1000)+time_delta, // Change to ms
+        duration: Math.round(note.duration*1000), // ms
         velocity: Math.round(note.velocity*255),
         midi: note.midi
       }
@@ -63,7 +63,7 @@ function prepareNotes() {
     });
   });
   // Sort notes in time
-  notes.sort((a, b) => a.note_v.time - b.note_v.time);
+  notes.sort((a, b) => a.note.time - b.note.time);
 
   configure_events();
 }
@@ -76,70 +76,95 @@ function prepareNotes() {
 */
 function configure_events(){
   // Move all notes forward from time delta
-  // Adjust time value (ms)
-  for (let note of notes){
-    note.note.time = Math.round(note.note.time*1000); // Change to ms
-    note.note.duration = Math.round(note.note.duration*1000+time_delta); // ms
-  }
 
-  // Create events
+  // Create events (On and Off)
   for (let note of notes) {
-    // Create all note ons events
+    const start = note.note.time;
+    const end = note.note.time + note.note.duration;
+
     events.push({
       midi: note.note.midi,
-      time: note.note.time,
+      time: start,
       on: 1,
-      noteRef: note  
+      velocity:note.note.velocity,
+      noteRef: note
     });
 
-    // Create all note offs events
     events.push({
       midi: note.note.midi,
-      time: note.note.time + note.note.duration,
+      time: end,
       on: 0,
-      noteRef: note  
+      velocity:0,
+      noteRef: note
     });
   }
 
   // Now check for notes restarts (add mandatory waiting time. (reduce note duration, and add a note off))
   // Loops through each keys
-  const activeNoteByMidi = new Map(); // midi -> note object
 
   // Sort events by time
-  events.sort((a, b) => {
-  if (a.time !== b.time) return a.time - b.time;
-    return a.on - b.on; // off (0) before on (1)
-  });
-
-  /*for (let e of events) {
+  events.sort((a, b) =>
+    a.time !== b.time ? a.time - b.time : a.on - b.on
+  );
+  const delayed_events = [];
+  const activeByMidi = new Map();
+  // Add mandatory delay between on notes.
+  for (const e of events) {
     const midi = e.midi;
+
     if (e.on === 1) {
       // NOTE ON
-      if (activeNoteByMidi.has(midi)) {
-        const prev = activeNoteByMidi.get(midi);
+      if (activeByMidi.has(midi)) {
+        const prev = activeByMidi.get(midi);
 
-        // shorten previous note, do NOT move timing
-        const forcedOff = e.time - PHY_MIN_OFF_ON_DELAY;
-        prev.note.duration = Math.max(
-          0,
-          forcedOff - prev.note.time
-        );
+        const forcedOffTime =
+          Math.max(
+            prev.time,               // never before previous ON
+            e.time - PHY_MIN_OFF_ON_DELAY
+          );
+
+        // Insert forced OFF
+        delayed_events.push({
+          midi,
+          time: forcedOffTime,
+          on: 0,
+          noteRef: prev.noteRef
+        });
+
+        activeByMidi.delete(midi);
       }
 
-      activeNoteByMidi.set(midi, e.noteRef);
+      // Insert current ON
+      delayed_events.push(e);
+      activeByMidi.set(midi, e);
 
     } else {
       // NOTE OFF
-      if (activeNoteByMidi.get(midi) === e.noteRef) {
-        e.noteRef.note.duration = Math.max(
-          0,
-          e.time - e.noteRef.note.time
-        );
-        activeNoteByMidi.delete(midi);
+      if (activeByMidi.get(midi) === e.noteRef) {
+        activeByMidi.delete(midi);
       }
+      delayed_events.push(e);
     }
   }
-  */
+
+  delayed_events.sort((a, b) =>
+    a.time !== b.time ? a.time - b.time : a.on - b.on
+  );
+  // Now remove consecutives offs on the same note
+  const lastEventByMidi = new Map();
+
+  for (const e of delayed_events) {
+    const last = lastEventByMidi.get(e.midi);
+
+    if (e.on === 0 && last?.on === 0) {
+      // consecutive OFF for same midi → drop this one
+      continue;
+    }
+
+    adjustedEvents.push(e);
+    lastEventByMidi.set(e.midi, e);
+  }
+
   // Update notes height
   for (let note of notes) {
     note.el.style.height =

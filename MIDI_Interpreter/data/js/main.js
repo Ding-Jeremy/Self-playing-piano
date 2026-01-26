@@ -146,9 +146,9 @@ function send_events(elapsed) {
 function send_event_to_esp(event) {
   // Constitute the message.
   const msg = {
-    time: Math.round(event.time),
+    time: event.time,
     midi: event.midi - START_NOTE,
-    velocity: event.on ? Math.round(event.velocity * 255) : 0,
+    velocity: event.velocity,
     on: event.on
   };
 
