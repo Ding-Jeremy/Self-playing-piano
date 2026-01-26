@@ -4,9 +4,6 @@
 //const gateway = `ws://localhost:8080`;
 const gateway = `ws://${window.location.hostname}/ws`;
 let websocket;
-
-// Sends note to the ESP-32 that are that time away
-
 window.addEventListener("load", onLoad);
 
 // Web socket 
@@ -21,7 +18,7 @@ const piano = document.getElementById("piano");
 const playPauseBtn = document.getElementById("playPause");
 const fileInput = document.getElementById("fileInput");
 const restartBtn = document.getElementById("restart");
-const LOOKAHEAD_MS = 0.5;
+const LOOKAHEAD_MS = 500;       // Look ahead
 
 let nextEventIndex = 0;  // cursor into notes[]
 
@@ -121,11 +118,19 @@ function animate(time) {
 
   // Highlight currently played keys
   highlight_notes(keys_currently_played);
+  
+  // Send events to the ESP-32.
   send_events(elapsed);
+
+  // Repeat the animation
   requestAnimationFrame(animate);
 }
 
+/*
+* By the elapsed time, 
+*/
 function send_events(elapsed) {
+  // Compute the last time to look up 
   const windowEnd = elapsed + LOOKAHEAD_MS;
 
   while (
@@ -137,9 +142,11 @@ function send_events(elapsed) {
   }
 }
 
+
 function send_event_to_esp(event) {
+  // Constitute the message.
   const msg = {
-    time: Math.round(event.time), // already ms
+    time: Math.round(event.time),
     midi: event.midi - START_NOTE,
     velocity: event.on ? Math.round(event.velocity * 255) : 0,
     on: event.on
