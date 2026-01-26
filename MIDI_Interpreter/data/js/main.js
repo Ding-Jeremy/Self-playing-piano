@@ -134,10 +134,10 @@ function send_events(elapsed) {
   const windowEnd = elapsed + LOOKAHEAD_MS;
 
   while (
-    nextEventIndex < events.length &&
-    events[nextEventIndex].time <= windowEnd
+    nextEventIndex < adjustedEvents.length &&
+    adjustedEvents[nextEventIndex].time <= windowEnd
   ) {
-    send_event_to_esp(events[nextEventIndex]);
+    send_event_to_esp(adjustedEvents[nextEventIndex]);
     nextEventIndex++;
   }
 }

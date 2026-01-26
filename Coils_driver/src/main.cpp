@@ -14,7 +14,7 @@
 
 #define D_SPI_BUFFSIZE 8
 
-#define D_NOTES_BUFFER_SIZE 20 // Notes to be stored
+#define D_NOTES_BUFFER_SIZE 100 // Notes to be stored
 
 #define D_PHASE_ACC_DURATION 20 // Solenoid acceleration [ms]
 
@@ -63,12 +63,14 @@ void i2c_scan();
 void init_spi();
 void all_off();
 void remove_first_note();
+void read_spi_buffer(U_FRAME *frame);
+
 // Two boards with different I2C addresses
 Adafruit_PWMServoDriver g_pwm1 = Adafruit_PWMServoDriver(0x40);
 // Adafruit_PWMServoDriver pwm2 = Adafruit_PWMServoDriver(0x41);
 
 //-------------- VARIABLES ---------------
-U_FRAME g_spi_buf_rx;                       // SPI receive buffer
+uint8_t g_spi_buf_rx[D_SPI_BUFFSIZE];       // SPI receive buffer
 volatile byte g_spi_buf_index;              // Index of SPI buffer
 volatile boolean g_spi_msg_ready;           // Message ready flag
 S_NOTE g_notes_buffer[D_NOTES_BUFFER_SIZE]; // Note buffer
@@ -110,8 +112,10 @@ void loop()
   {
     g_spi_buf_index = 0;
     g_spi_msg_ready = false;
+    U_FRAME rx_frame;
+    read_spi_buffer(&rx_frame);
 
-    switch (g_spi_buf_rx.bits.command)
+    switch (rx_frame.bits.command)
     {
     case E_SPI_COMM_NOOPERA:
       break;
@@ -133,16 +137,29 @@ void loop()
       {
         g_playing = true;
         Serial.println("playing");
-        g_resume_time = millis();                  // Save current time of resumal
-        g_midi_time = g_spi_buf_rx.bits.note.time; // Get midi time at resumal
+        Serial.print("Current time: ");
+
+        g_resume_time = millis(); // Save current time of resumal
+        Serial.print(g_resume_time);
+        Serial.println("");
+        g_midi_time = rx_frame.bits.note.time; // Get midi time at resumal
       }
       break;
 
     case E_SPI_COMM_NOTE:
-      g_notes_buffer[g_notes_buffer_index] = g_spi_buf_rx.bits.note;
+      // Note received
+      /* Serial.println("Received note:");
+       Serial.print(rx_frame.bits.note.midi);
+       Serial.print(" - ");
+       Serial.print(rx_frame.bits.note.time);
+       Serial.print(" - ");
+       Serial.print(rx_frame.bits.note.on);
+       Serial.print(" - ");
+       Serial.print(rx_frame.bits.note.vel);
+       Serial.println("");*/
+
+      g_notes_buffer[g_notes_buffer_index] = rx_frame.bits.note;
       g_notes_buffer_index++;
-      Serial.println(g_notes_buffer[g_notes_buffer_index].midi);
-      Serial.println(g_notes_buffer[g_notes_buffer_index].on);
 
       if (g_notes_buffer_index >= D_NOTES_BUFFER_SIZE)
       {
@@ -170,15 +187,17 @@ void loop()
         break; // earliest note is still in the future
 
       // --- Execute note ---
-      if (note.midi > 0 && note.midi < 16)
+      if (note.midi - 35 > 0 && note.midi - 35 < 16)
       {
+        Serial.print("Playing note: ");
+        Serial.println(note.midi);
         if (note.on)
         {
-          g_pwm1.setPWM(note.midi, 0, 4095);
+          g_pwm1.setPWM(note.midi - 35, 0, 4095);
         }
         else
         {
-          g_pwm1.setPWM(note.midi, 0, 0);
+          g_pwm1.setPWM(note.midi - 35, 0, 0);
         }
       }
       // --- Remove note from buffer ---
@@ -192,15 +211,15 @@ ISR(SPI_STC_vect)
 {
   byte c = SPDR; // Read incoming SPI byte
 
-  if (g_spi_buf_index < D_SPI_BUFFSIZE)
+  if (g_spi_buf_index < D_SPI_BUFFSIZE - 1)
   {
     // Store the current value in a buffer (not the last dummy)
-    g_spi_buf_rx.bytes[g_spi_buf_index] = c;
+    g_spi_buf_rx[g_spi_buf_index] = c;
     // Sends the corresponding tx (DUMMY)
     SPDR = 0x00;
     g_spi_buf_index++;
   }
-  else if (g_spi_buf_index == D_SPI_BUFFSIZE)
+  else if (g_spi_buf_index == D_SPI_BUFFSIZE - 1)
   { // Last dummy byte received
     g_spi_msg_ready = true;
   }
@@ -263,4 +282,22 @@ void remove_first_note()
   }
 
   g_notes_buffer_index--;
+}
+
+/*
+ * Decode the spi buffer
+ */
+void read_spi_buffer(U_FRAME *frame)
+{
+  frame->bits.command = (E_SPI_COMM)g_spi_buf_rx[0];
+  frame->bits.note.midi = g_spi_buf_rx[1];
+  frame->bits.note.on = g_spi_buf_rx[2];
+  frame->bits.note.vel = g_spi_buf_rx[3];
+
+  uint32_t time =
+      ((uint32_t)g_spi_buf_rx[4]) |
+      ((uint32_t)g_spi_buf_rx[5] << 8) |
+      ((uint32_t)g_spi_buf_rx[6] << 16) |
+      ((uint32_t)g_spi_buf_rx[7] << 24);
+  frame->bits.note.time = time;
 }
