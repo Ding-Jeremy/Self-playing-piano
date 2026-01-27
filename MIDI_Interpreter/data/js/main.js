@@ -27,11 +27,14 @@ restartBtn.onclick = () => {
   // Always reset time
   pauseTime = 0;
   startTime = performance.now();
-
+  // Reset note event index
+  nextEventIndex = 0;
   // Reset visuals
   display_notes(time_delta);
   document.getElementById("timeDisplay").textContent = formatTime(0);
 
+  // send restart command
+  websocket.send(JSON.stringify({type: "restart"}));
   if (!paused) {
     // Was playing → keep playing
     requestAnimationFrame(animate);
@@ -68,7 +71,7 @@ playPauseBtn.onclick = () => {
     // Compute time (minus pause time)
     startTime = performance.now() - pauseTime;
     const time_info = {
-      time: startTime
+      time: pauseTime
     };
     // Send current midi time to server. (Synchronize with arduino)
     websocket.send(JSON.stringify({type: "resume",data:time_info}));

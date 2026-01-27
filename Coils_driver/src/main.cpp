@@ -14,7 +14,7 @@
 
 #define D_SPI_BUFFSIZE 8
 
-#define D_NOTES_BUFFER_SIZE 100 // Notes to be stored
+#define D_NOTES_BUFFER_SIZE 100 // Notes buffer size
 
 #define D_PHASE_ACC_DURATION 20 // Solenoid acceleration [ms]
 
@@ -26,7 +26,8 @@ typedef enum
   E_SPI_COMM_ALL_OFF = 0x02, // Turn all solenoid off
   E_SPI_COMM_START = 0x03,   // Start playing the notes, (reset timer)
   E_SPI_COMM_PAUSE = 0x04,   // Pause the music
-  E_SPI_COMM_RESUME = 0x05   // Resume the music
+  E_SPI_COMM_RESUME = 0x05,  // Resume the music
+  E_SPI_COMM_RESTART = 0x06  // Restart the music
 } E_SPI_COMM;
 
 //-------------- STRUCTS / UNION ---------------
@@ -83,17 +84,23 @@ bool g_playing = false;      // Playing flag
 
 void setup()
 {
+  // Begin serial comm
   Serial.begin(D_SERIAL_BAUD);
+  // intialize SPI comm
   init_spi();
+  // Set the output enable pin
   pinMode(D_OE_PIN, OUTPUT);
+  // Enable outputs
   digitalWrite(D_OE_PIN, 0);
 
+  // Begin the PCA9685 pwm's
   g_pwm1.begin();
+
   // Set SCL speed
   Wire.setClock(D_I2C_SPEED);
   // set totem pole output
   g_pwm1.setOutputMode(true);
-
+  // set frequency
   g_pwm1.setPWMFreq(D_PWM_FREQ);
 
   for (uint8_t i = 0; i < 16; i++)
@@ -119,13 +126,23 @@ void loop()
     {
     case E_SPI_COMM_NOOPERA:
       break;
-
+    case E_SPI_COMM_RESTART:
+      Serial.println("Restarting");
+      // Empty buffer, save resume time.
+      g_notes_buffer_index = 0;
+      g_resume_time = millis(); // Save current time of resumal
+      g_midi_time = 0;          // Set midi to 0
+      // Serial.print(rx_frame.bits.note.time);
+      break;
     case E_SPI_COMM_ALL_OFF:
       all_off();
       break;
     case E_SPI_COMM_PAUSE:
+      // Receive a pause command
       if (g_playing)
       {
+        // Turn all the solenoids off
+        all_off();
         Serial.println("paused");
         g_playing = false;
       }
@@ -135,13 +152,14 @@ void loop()
       // Resume command, comes with the current midi time (sent by server)
       if (!g_playing)
       {
+        // Systems keeps playing
         g_playing = true;
-        Serial.println("playing");
-        Serial.print("Current time: ");
+        /*Serial.println("playing");
+        Serial.print("Current time: ");*/
 
         g_resume_time = millis(); // Save current time of resumal
-        Serial.print(g_resume_time);
-        Serial.println("");
+        /*Serial.print(rx_frame.bits.note.time);
+        Serial.println("");*/
         g_midi_time = rx_frame.bits.note.time; // Get midi time at resumal
       }
       break;
@@ -175,7 +193,7 @@ void loop()
   // Run solenoids if playing
   if (g_playing)
   {
-    // Get current time
+    // Get client time calculation (current time)
     g_current_time = millis() - g_resume_time + g_midi_time;
 
     // Check for solenoids to start in the futur buffer
@@ -189,8 +207,8 @@ void loop()
       // --- Execute note ---
       if (note.midi - 35 > 0 && note.midi - 35 < 16)
       {
-        Serial.print("Playing note: ");
-        Serial.println(note.midi);
+        /*Serial.print("Playing note: ");
+         Serial.println(note.midi);*/
         if (note.on)
         {
           g_pwm1.setPWM(note.midi - 35, 0, 4095);

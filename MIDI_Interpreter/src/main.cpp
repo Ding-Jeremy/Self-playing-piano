@@ -50,7 +50,8 @@ typedef enum
     E_SPI_COMM_ALL_OFF = 0x02, // Turn all solenoid off
     E_SPI_COMM_START = 0x03,   // Start playing the notes, (reset timer)
     E_SPI_COMM_PAUSE = 0x04,   // Pause the music
-    E_SPI_COMM_RESUME = 0x05   // Resume the music
+    E_SPI_COMM_RESUME = 0x05,  // Resume the music
+    E_SPI_COMM_RESTART = 0x06  // Restart the music
 } E_SPI_COMM;
 
 //-------------- STRUCTS / UNION ---------------
@@ -293,6 +294,12 @@ void handle_websocket_message(void *arg, uint8_t *data, size_t len)
                 resume_frame.bits.command = E_SPI_COMM_RESUME;
                 resume_frame.bits.note.time = (uint32_t)obj["data"]["time"];
                 send_frame_2(resume_frame);
+            }
+            else if (type == "restart")
+            {
+                U_FRAME restart_frame;
+                restart_frame.bits.command = E_SPI_COMM_RESTART;
+                send_frame_2(restart_frame);
             }
         }
     }
