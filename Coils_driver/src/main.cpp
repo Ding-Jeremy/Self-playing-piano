@@ -286,6 +286,10 @@ void init_spi()
  */
 void all_off()
 {
+  for (uint8_t i = 0; i < 16; i++)
+  {
+    g_pwm1.setPWM(i, 0, 0);
+  }
 }
 
 /*
